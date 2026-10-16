@@ -1,0 +1,21 @@
+# Render Blueprint for KiranaFlow
+# Deploy on Render's Free Web Service tier (no credit card required)
+# Note: Free tier instances spin down after 15 min of inactivity.
+# KiranaFlow's idempotent startup seeder recreates pristine demo data on every cold restart.
+
+services:
+  - type: web
+    name: kiranaflow
+    runtime: python
+    plan: free
+    region: oregon # or frankfurt / singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    healthCheckPath: /healthz
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: RESET_KEY
+        sync: false # Set privately in Render dashboard to protect /reset route

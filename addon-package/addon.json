@@ -1,0 +1,65 @@
+{
+  "_comment": "VERIFY: Proposed addon.json for Alexa+ Private Preview. Tooling access is in private partner preview per hackathon rules.",
+  "manifestVersion": "1.0",
+  "storeListing": {
+    "locales": {
+      "en-US": {
+        "name": "Namma-Kanakku",
+        "shortDescription": "A voice khata that learns your shop's language, keeps debts private, and never guesses with money.",
+        "fullDescription": "Namma-Kanakku turns Alexa+ into an intelligent voice khata for local neighbourhood kirana stores. It understands mixed Indian languages (English, Tamil words, Tanglish) without an external LLM, deterministically matching products, calculating loose-item weights, and maintaining customer credit ledgers. It strictly respects privacy: customer debt balances and limit statuses are never announced aloud in earshot of other customers, appearing only on screen. Every successful entry provides an immediate itemized total with a spoken undo safety prompt. Shopkeepers can teach custom vocabulary, update prices by voice, and review 30-day overdue accounts.",
+        "examplePhrases": [
+          "Alexa, log 1 curd and half kilo toor dal for Ramesh tab",
+          "Alexa, what is Ramesh Teacher's current balance?",
+          "Alexa, record payment of 50 rupees from Ramesh Teacher",
+          "Alexa, check overdue accounts"
+        ],
+        "keywords": [
+          "khata",
+          "kirana",
+          "ledger",
+          "credit",
+          "accounting",
+          "retail",
+          "inventory"
+        ]
+      }
+    }
+  },
+  "privacyAndCompliance": {
+    "privacyPolicyUrl": "https://github.com/monishchandran2007-hub/Namma-Kanakku/blob/main/PRIVACY.md",
+    "termsOfUseUrl": "https://github.com/monishchandran2007-hub/Namma-Kanakku/blob/main/TERMS.md"
+  },
+  "mediaAssets": {
+    "icons": {
+      "light": [
+        { "size": "72x72", "uri": "https://raw.githubusercontent.com/monishchandran2007-hub/Namma-Kanakku/main/assets/icon-72x72.png" },
+        { "size": "64x64", "uri": "https://raw.githubusercontent.com/monishchandran2007-hub/Namma-Kanakku/main/assets/icon-64x64.png" },
+        { "size": "88x88", "uri": "https://raw.githubusercontent.com/monishchandran2007-hub/Namma-Kanakku/main/assets/icon-88x88.png" },
+        { "size": "126x126", "uri": "https://raw.githubusercontent.com/monishchandran2007-hub/Namma-Kanakku/main/assets/icon-126x126.png" },
+        { "size": "180x180", "uri": "https://raw.githubusercontent.com/monishchandran2007-hub/Namma-Kanakku/main/assets/icon-180x180.png" },
+        { "size": "241x241", "uri": "https://raw.githubusercontent.com/monishchandran2007-hub/Namma-Kanakku/main/assets/icon-241x241.png" }
+      ],
+      "dark": []
+    },
+    "carouselImages": [
+      {
+        "size": "600x900",
+        "uri": "https://raw.githubusercontent.com/monishchandran2007-hub/Namma-Kanakku/main/assets/carousel-1.png",
+        "altText": "Namma-Kanakku Voice Khata card interface"
+      }
+    ]
+  },
+  "integrations": [
+    {
+      "type": "MCP",
+      "config": {
+        "endpoints": {
+          "default": {
+            "type": "HTTPS",
+            "uri": "https://kiranaflow.onrender.com/mcp"
+          }
+        }
+      }
+    }
+  ]
+}

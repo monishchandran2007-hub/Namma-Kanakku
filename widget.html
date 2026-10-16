@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KiranaFlow Khata Card</title>
+<style>
+  :root {
+    --bg-page: #f8fafc;
+    --bg-card: #ffffff;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --border-color: #e2e8f0;
+    --accent-blue: #0284c7;
+    --accent-blue-light: #e0f2fe;
+    --accent-blue-text: #0369a1;
+    --badge-overdue-bg: #fef3c7;
+    --badge-overdue-text: #92400e;
+    --badge-overlimit-bg: #fee2e2;
+    --badge-overlimit-text: #991b1b;
+    --receipt-bg: #f1f5f9;
+    --divider: #cbd5e1;
+    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg-page: #0b1120;
+      --bg-card: #1e293b;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --border-color: #334155;
+      --accent-blue: #38bdf8;
+      --accent-blue-light: #082f49;
+      --accent-blue-text: #7dd3fc;
+      --badge-overdue-bg: #78350f;
+      --badge-overdue-text: #fef3c7;
+      --badge-overlimit-bg: #7f1d1d;
+      --badge-overlimit-text: #fecaca;
+      --receipt-bg: #0f172a;
+      --divider: #475569;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+    }
+  }
+
+  body.theme-light {
+    --bg-page: #f8fafc;
+    --bg-card: #ffffff;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --border-color: #e2e8f0;
+    --accent-blue: #0284c7;
+    --accent-blue-light: #e0f2fe;
+    --accent-blue-text: #0369a1;
+    --badge-overdue-bg: #fef3c7;
+    --badge-overdue-text: #92400e;
+    --badge-overlimit-bg: #fee2e2;
+    --badge-overlimit-text: #991b1b;
+    --receipt-bg: #f1f5f9;
+    --divider: #cbd5e1;
+  }
+
+  body.theme-dark {
+    --bg-page: #0b1120;
+    --bg-card: #1e293b;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --border-color: #334155;
+    --accent-blue: #38bdf8;
+    --accent-blue-light: #082f49;
+    --accent-blue-text: #7dd3fc;
+    --badge-overdue-bg: #78350f;
+    --badge-overdue-text: #fef3c7;
+    --badge-overlimit-bg: #7f1d1d;
+    --badge-overlimit-text: #fecaca;
+    --receipt-bg: #0f172a;
+    --divider: #475569;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg-page);
+    color: var(--text-primary);
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+  }
+
+  .card-container {
+    width: 100%;
+    max-width: 440px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 18px;
+    box-shadow: var(--shadow);
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 10px;
+    margin-bottom: 14px;
+  }
+
+  .shop-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--accent-blue);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .live-pill {
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: var(--accent-blue-light);
+    color: var(--accent-blue-text);
+    padding: 3px 8px;
+    border-radius: 9999px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .customer-hero {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    background: var(--receipt-bg);
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+  }
+
+  .avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--accent-blue);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .customer-meta {
+    flex-grow: 1;
+  }
+
+  .customer-name {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin: 0;
+    color: var(--text-primary);
+  }
+
+  .customer-status {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-top: 2px;
+  }
+
+  .badges-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .badge-overdue {
+    background: var(--badge-overdue-bg);
+    color: var(--badge-overdue-text);
+  }
+
+  .badge-overlimit {
+    background: var(--badge-overlimit-bg);
+    color: var(--badge-overlimit-text);
+  }
+
+  .receipt-box {
+    border: 1px dashed var(--divider);
+    border-radius: 8px;
+    padding: 12px;
+    background: var(--bg-card);
+    margin-bottom: 12px;
+  }
+
+  .receipt-title {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+
+  .receipt-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    font-size: 0.9rem;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .receipt-row:last-child {
+    border-bottom: none;
+  }
+
+  .item-desc {
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .item-price {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .receipt-total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 2px solid var(--border-color);
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+
+  .screen-note-box {
+    background: var(--receipt-bg);
+    border-left: 3px solid var(--accent-blue);
+    padding: 8px 12px;
+    border-radius: 0 6px 6px 0;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-top: 10px;
+  }
+
+  .safety-footer {
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="card-container" id="widgetRoot">
+  <div class="header">
+    <div class="shop-title">
+      <span>🏪</span>
+      <span>Namma-Kanakku (KiranaFlow)</span>
+    </div>
+    <div class="live-pill" id="livePill">Active Voice</div>
+  </div>
+
+  <div class="customer-hero">
+    <div class="avatar" id="avatarInitial">R</div>
+    <div class="customer-meta">
+      <div class="customer-name" id="custName">Ramesh Teacher</div>
+      <div class="customer-status" id="custSubtitle">Updated just now</div>
+    </div>
+  </div>
+
+  <div class="badges-row" id="badgesArea"></div>
+
+  <div class="receipt-box" id="receiptArea">
+    <div class="receipt-title" id="receiptHeader">Latest Entry</div>
+    <div id="receiptItems">
+      <div class="receipt-row">
+        <span class="item-desc">1 packet Curd 500ml</span>
+        <span class="item-price">Rs 35</span>
+      </div>
+    </div>
+    <div class="receipt-total-row" id="totalRow">
+      <span>Itemized Total</span>
+      <span id="totalValue" style="color:var(--accent-blue);">Rs 35</span>
+    </div>
+  </div>
+
+  <div class="screen-note-box" id="screenNote">
+    Say 'undo' if that's wrong.
+  </div>
+
+  <div class="safety-footer">
+    Private ledger • Zero customer debt spoken aloud • [DEMO DATA - NOT REAL]
+  </div>
+</div>
+
+<script>
+  // MCP Apps JSON-RPC 2.0 postMessage Handshake & Bridge
+  function initPostMessageBridge() {
+    window.addEventListener("message", function(e) {
+      const data = e.data;
+      if (!data) return;
+
+      // 1. Host response or initialization handshake
+      if (data.method === "ui/initialize" || data.id === 1) {
+        if (data.params && data.params.theme) {
+          setTheme(data.params.theme);
+        }
+        // Send initialized confirmation
+        try {
+          window.parent.postMessage({
+            jsonrpc: "2.0",
+            method: "ui/notifications/initialized"
+          }, "*");
+        } catch(err) {}
+      } 
+      // 2. Tool input streaming or result rendering
+      else if (data.method === "ui/notifications/tool-input" || data.method === "ui/tool-result") {
+        renderPayload(data.params || data.result);
+      }
+      // 3. Surface context changed (orientation, theme, device class)
+      else if (data.method === "host-context-changed") {
+        if (data.params && data.params.theme) {
+          setTheme(data.params.theme);
+        }
+      }
+    });
+
+    // Send initial handshake request to host
+    try {
+      window.parent.postMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "ui/initialize",
+        params: {
+          appCapabilities: {
+            availableDisplayModes: ["inline", "fullscreen"]
+          }
+        }
+      }, "*");
+    } catch(err) {}
+  }
+
+  function setTheme(theme) {
+    if (theme === "dark") {
+      document.body.className = "theme-dark";
+    } else if (theme === "light") {
+      document.body.className = "theme-light";
+    }
+  }
+
+  function renderPayload(payload) {
+    if (!payload) return;
+    const data = payload.structured_data || payload;
+
+    // Customer Name & Avatar
+    if (data.customer_name) {
+      document.getElementById("custName").innerText = data.customer_name;
+      document.getElementById("avatarInitial").innerText = data.customer_name.charAt(0).toUpperCase();
+    }
+
+    // Badges: Overdue & Over-limit
+    const badgesDiv = document.getElementById("badgesArea");
+    badgesDiv.innerHTML = "";
+    if (data.days_unpaid >= 30) {
+      badgesDiv.innerHTML += '<span class="badge badge-overdue">⚠️ Unpaid ' + data.days_unpaid + ' days</span>';
+    }
+    if (data.is_over_limit) {
+      badgesDiv.innerHTML += '<span class="badge badge-overlimit">⛔ Over Credit Limit</span>';
+    }
+
+    // Receipt lines
+    const itemsContainer = document.getElementById("receiptItems");
+    const totalRow = document.getElementById("totalRow");
+    itemsContainer.innerHTML = "";
+
+    if (data.items && Array.isArray(data.items) && data.items.length > 0) {
+      document.getElementById("receiptHeader").innerText = "Itemized Receipt";
+      data.items.forEach(function(it) {
+        itemsContainer.innerHTML += '<div class="receipt-row">' +
+          '<span class="item-desc">' + (it.display_qty || (it.quantity + " " + it.unit)) + ' ' + it.display_name + '</span>' +
+          '<span class="item-price">Rs ' + it.line_total + '</span>' +
+          '</div>';
+      });
+      totalRow.style.display = "flex";
+      document.getElementById("totalValue").innerText = "Rs " + (data.total_amount || 0);
+    } else if (data.payment_amount) {
+      document.getElementById("receiptHeader").innerText = "Payment Receipt";
+      itemsContainer.innerHTML = '<div class="receipt-row">' +
+        '<span class="item-desc">Payment Received</span>' +
+        '<span class="item-price" style="color:#16a34a;">Rs ' + data.payment_amount + '</span>' +
+        '</div>';
+      totalRow.style.display = "none";
+    } else if (data.undone_amount) {
+      document.getElementById("receiptHeader").innerText = "Reverted Transaction";
+      itemsContainer.innerHTML = '<div class="receipt-row">' +
+        '<span class="item-desc">Reverted ' + (data.undone_entry_type || "Entry") + '</span>' +
+        '<span class="item-price" style="color:#ea580c;">Rs ' + data.undone_amount + '</span>' +
+        '</div>';
+      totalRow.style.display = "none";
+    }
+
+    // Screen note
+    if (payload.screen_note) {
+      document.getElementById("screenNote").innerText = payload.screen_note;
+    }
+  }
+
+  initPostMessageBridge();
+</script>
+
+</body>
+</html>

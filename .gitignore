@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local Database & Secrets
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+.env
+.env.*
+!.env.example
+*.key
+
+# Alexa & Cloud CLI Credentials (Never commit)
+.alexa-ai/
+credentials
+*.pem
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo

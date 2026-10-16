@@ -1,0 +1,7 @@
+# KiranaFlow - Pinned Dependencies
+mcp==2.3.0
+rapidfuzz==3.14.6
+uvicorn==0.42.0
+starlette==0.52.1
+pydantic==2.12.5
+pytest==9.1.1
