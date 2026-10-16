@@ -121,3 +121,53 @@ Hugging Face's default Gradio builder injected `gradio[oauth,mcp]==6.30.0`. Grad
 ### Resolution & Workaround
 1. Pinned `sdk_version: 5.20.0` in the Space's `README.md` metadata (Gradio 5.x does not bundle the conflicting `mcp<2.0.0` sub-dependency).
 2. Removed redundant `gradio` declarations from `requirements.txt` so pip cleanly installs the modern `mcp==2.3.0` stack.
+
+---
+
+## 7. Cloud Watchdog Killing CPU Workloads: Hugging Face ZeroGPU Service SIGTERM
+
+### Friction
+When deploying the CPU-based MCP server to Hugging Face Spaces, the container started normally, bound to port 7860, but was abruptly killed within 15 seconds of launch:
+```
+Exit code: 3. Reason: No @spaces.GPU function detected during startup
+Starting Namma-Kanakku on port 7860...
+```
+
+### Root Cause
+Hugging Face Spaces runs a supervisor service on port 7861 that inspects Python processes at startup. Even when the hardware is configured for CPU (`hardware: cpu-basic`), if the environment detects the `spaces` package or ZeroGPU infrastructure hooks, the supervisor service requires at least one registered `@spaces.GPU` entrypoint. If the count of registered GPU functions is 0, the supervisor concludes the application misconfigured its GPU requests and immediately issues a `SIGTERM`.
+
+### Resolution & Workaround
+Register a lightweight, no-op placeholder decorated with `@spaces.GPU`:
+```python
+try:
+    import spaces
+
+    @spaces.GPU
+    def _gpu_warmup():
+        """No-op placeholder satisfying ZeroGPU startup count on CPU space."""
+        pass
+except Exception:
+    pass
+```
+Because the `@spaces.GPU` decorator registers the function metadata during module import without actually allocating GPU hardware, the supervisor count test passes immediately. Since the function is never called, zero GPU quotas are consumed.
+
+---
+
+## 8. Dual-Stack Routing: Gradio SPA Catch-All vs Starlette MCP Endpoints
+
+### Friction
+When mounting the Starlette MCP application (`/mcp`, `/widget`, `/healthz`, `/ledger`) alongside Gradio in `app.py`:
+- Visiting `/widget` or loading the interactive card in an `<iframe>` recursively rendered the Gradio UI instead of the widget HTML.
+- Requests to `/healthz` returned the Gradio SPA fallback instead of JSON.
+
+### Root Cause
+Gradio mounts an internal single-page application (SPA) catch-all route at `/` that captures unhandled paths before sub-mounted apps (e.g. `gradio_app.mount("/mcp-app", starlette_app)`) can process root-relative paths like `/widget` or `/healthz`.
+
+### Resolution & Workaround
+Directly inject the Starlette app routes at index 0 of Gradio's internal FastAPI router so that dedicated endpoints take priority over the SPA catch-all:
+```python
+for route in reversed(starlette_app.routes):
+    gradio_fastapi.routes.insert(0, route)
+```
+This guarantees `/mcp`, `/widget`, `/healthz`, and `/ledger` respond with their authentic payloads, while preserving Gradio's interactive UI at root.
+
