@@ -14,13 +14,12 @@ import sys
 # MUST be set before any HF/spaces import to disable the ZeroGPU startup hook.
 # Without this, spaces==0.51.x kills the process on CPU-only hardware because
 # it finds no @spaces.GPU-decorated function.
-os.environ.setdefault("SPACES_ZERO_GPU", "0")
+os.environ["SPACES_ZERO_GPU"] = "0"  # Force-override; setdefault won't work if HF pre-sets this
 
 # Ensure local imports resolve
 sys.path.insert(0, os.path.dirname(__file__))
 
 import gradio as gr
-import uvicorn
 from server import app as starlette_app
 from database import get_db, seed_demo_data
 from ledger import get_customer_balance, log_credit_entry, undo_last_entry, get_overdue_accounts
@@ -158,13 +157,35 @@ with gr.Blocks(title="Namma-Kanakku (நம்ம கணக்கு) - Voice Kh
     btn_overdue.click(test_overdue, inputs=[], outputs=[out_overdue])
     btn_ws.click(test_wholesale, inputs=[ws_item, ws_price, ws_qty], outputs=[out_ws])
 
-# Mount Gradio at / on the MCP Starlette app.
-# The "/" conflict is gone (server.py's defensive redirect was removed),
-# so HF's health check GET / now reaches Gradio and gets HTTP 200.
-app = gr.mount_gradio_app(starlette_app, demo, path="/")
+# ── HF Spaces launch ────────────────────────────────────────────────────────
+# HF's Node.js wrapper watches stdout for Gradio's startup message
+# "Running on local URL:" and sends SIGTERM if it never appears.
+# demo.launch() emits that string; raw uvicorn.run() does not.
+#
+# Strategy:
+#   1. demo.launch(prevent_thread_lock=True) starts Gradio on port 7860 in a
+#      background thread and prints the expected startup message.
+#   2. We then mount the MCP Starlette sub-app onto Gradio's internal FastAPI
+#      app so /mcp, /widget, /healthz, /ledger are all accessible.
+#   3. demo.block_thread() keeps the main thread alive.
+# ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    # Port 7860 is the HF Spaces standard; do not read PORT env var.
     port = 7860
-    print(f"Starting Namma-Kanakku on port {port}...")
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+
+    # Start Gradio server in background (prints "Running on local URL:" → HF happy)
+    gradio_fastapi, _, _ = demo.launch(
+        server_name="0.0.0.0",
+        server_port=port,
+        prevent_thread_lock=True,
+        share=False,
+        show_error=True,
+    )
+
+    # Mount the MCP Starlette app (all routes: /mcp /widget /healthz /ledger)
+    # onto Gradio's FastAPI app. FastAPI checks its route list on every request
+    # so adding routes post-start is safe.
+    gradio_fastapi.mount("/mcp-app", starlette_app)
+
+    # Block main thread so the process stays alive
+    demo.block_thread()
