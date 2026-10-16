@@ -158,12 +158,13 @@ with gr.Blocks(title="Namma-Kanakku (நம்ம கணக்கு) - Voice Kh
     btn_overdue.click(test_overdue, inputs=[], outputs=[out_overdue])
     btn_ws.click(test_wholesale, inputs=[ws_item, ws_price, ws_qty], outputs=[out_ws])
 
-# Mount Gradio onto the Starlette MCP application at /
+# Mount Gradio at / on the MCP Starlette app.
+# The "/" conflict is gone (server.py's defensive redirect was removed),
+# so HF's health check GET / now reaches Gradio and gets HTTP 200.
 app = gr.mount_gradio_app(starlette_app, demo, path="/")
 
 if __name__ == "__main__":
-    # HF Spaces proxies to 7860; do NOT read the PORT env var — HF sets it to
-    # a reserved port (7861) that causes an "address already in use" bind error.
+    # Port 7860 is the HF Spaces standard; do not read PORT env var.
     port = 7860
     print(f"Starting Namma-Kanakku on port {port}...")
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")

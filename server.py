@@ -410,15 +410,7 @@ async def reset_route(request: Request):
     seed_demo_data(force=True)
     return JSONResponse({"status": "reset_successful", "message": "Demo data restored to pristine state."})
 
-@mcp_server.custom_route("/", methods=["GET", "POST"])
-async def root_defensive_route(request: Request):
-    """
-    Defensive routing: If an MCP client hits the root URL /, forward or redirect to /mcp.
-    For browser GET requests, redirect to /ledger dashboard.
-    """
-    if request.method == "POST":
-        return RedirectResponse(url="/mcp", status_code=307)
-    return RedirectResponse(url="/ledger", status_code=302)
+
 
 # Build the Streamable HTTP Starlette app mounted at /mcp
 app = mcp_server.streamable_http_app(streamable_http_path="/mcp", stateless_http=True)
