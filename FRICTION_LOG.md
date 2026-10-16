@@ -103,3 +103,21 @@ Enforced an architectural hard constraint in the MCP server:
 - `log_credit_entry`, `record_payment`, `undo_last_entry`, and `get_overdue_accounts` strictly return **zero** customer balances in `spoken_summary`.
 - Balance is spoken **exclusively** when the shopkeeper explicitly invokes `get_customer_balance`.
 - Sensitive notifications (such as 30-day overdue nudges or credit limit proximity) are rendered solely on the screen (`screen_note` and the `ui://khata-card` widget), never spoken aloud.
+
+---
+
+## 6. Cloud Platform Dependency Conflicts: Gradio 6.x `[mcp]` vs Official `mcp==2.3.0`
+
+### Friction
+When deploying to free cloud hosting on Hugging Face Spaces (Gradio SDK), the build failed during package resolution with:
+```
+ERROR: Cannot install gradio[mcp,oauth]==6.30.0 and mcp==2.3.0 because these package versions have conflicting dependencies.
+gradio[mcp,oauth] 6.30.0 depends on mcp<2.0.0 and >=1.21.0; extra == "mcp"
+```
+
+### Root Cause
+Hugging Face's default Gradio builder injected `gradio[oauth,mcp]==6.30.0`. Gradio's internal `mcp` extra had pinned `mcp<2.0.0`, conflicting directly with the official modern `mcp==2.3.0` specification used across our server.
+
+### Resolution & Workaround
+1. Pinned `sdk_version: 5.20.0` in the Space's `README.md` metadata (Gradio 5.x does not bundle the conflicting `mcp<2.0.0` sub-dependency).
+2. Removed redundant `gradio` declarations from `requirements.txt` so pip cleanly installs the modern `mcp==2.3.0` stack.
