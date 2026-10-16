@@ -350,95 +350,113 @@ def add_customer(
 
 
 def evaluate_wholesale_quote(
-    conn,
-    item_name_or_sku: str,
-    wholesale_price: float,
-    quantity: float = 1.0,
+    *args,
+    **kwargs,
 ) -> Dict[str, Any]:
     """
     Evaluates a wholesale supplier quote against the shop's current retail price.
 
-    Returns margin percentage and total retail profit so the shopkeeper can
-    decide whether to accept the quote — without revealing customer balances.
+    Accepts either:
+      evaluate_wholesale_quote(conn, item_name_or_sku, wholesale_price, quantity=1.0)
+    or:
+      evaluate_wholesale_quote(item_name_or_sku, wholesale_price, quantity=1.0, db_path=DEFAULT_DB_PATH)
     """
+    if len(args) > 0 and isinstance(args[0], sqlite3.Connection):
+        conn = args[0]
+        should_close = False
+        item_name_or_sku = args[1] if len(args) > 1 else kwargs.get("item_name_or_sku", "")
+        wholesale_price = args[2] if len(args) > 2 else kwargs.get("wholesale_price", 0.0)
+        quantity = args[3] if len(args) > 3 else kwargs.get("quantity", 1.0)
+    else:
+        db_path = kwargs.get("db_path", DEFAULT_DB_PATH)
+        conn = get_connection(db_path)
+        should_close = True
+        item_name_or_sku = args[0] if len(args) > 0 else kwargs.get("item_name_or_sku", "")
+        wholesale_price = args[1] if len(args) > 1 else kwargs.get("wholesale_price", 0.0)
+        quantity = args[2] if len(args) > 2 else kwargs.get("quantity", 1.0)
+
     try:
-        wp = float(wholesale_price)
-        qty = float(quantity)
-        if wp <= 0 or qty <= 0:
-            raise ValueError
-    except (ValueError, TypeError):
-        return {
-            "success": False,
-            "status": "INVALID_INPUT",
-            "spoken_summary": "Please provide valid wholesale price and quantity.",
-            "screen_note": "Invalid wholesale price or quantity.",
-            "structured_data": {},
-        }
-
-    cur = conn.cursor()
-
-    # Resolve item by SKU first, then fuzzy match
-    cur.execute(
-        "SELECT sku, display_name, price, unit FROM catalog_items WHERE sku = ? AND is_active = 1",
-        (item_name_or_sku,),
-    )
-    row = cur.fetchone()
-
-    if not row:
-        res = match_item(conn, item_name_or_sku)
-        if res["status"] == "SUCCESS":
-            sku = res["sku"]
-            display_name = res["display_name"]
-            retail_price = res["unit_price"]
-            unit = res["unit"]
-        else:
+        try:
+            wp = float(wholesale_price)
+            qty = float(quantity)
+            if wp <= 0 or qty <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
             return {
                 "success": False,
-                "status": "ITEM_NOT_FOUND",
-                "spoken_summary": f"Could not find '{item_name_or_sku}' in your catalog.",
-                "screen_note": f"Item '{item_name_or_sku}' not found.",
+                "status": "INVALID_INPUT",
+                "spoken_summary": "Please provide valid wholesale price and quantity.",
+                "screen_note": "Invalid wholesale price or quantity.",
                 "structured_data": {},
             }
-    else:
-        sku = row["sku"]
-        display_name = row["display_name"]
-        retail_price = row["price"]
-        unit = row["unit"]
 
-    margin_pct = ((retail_price - wp) / retail_price * 100) if retail_price > 0 else 0.0
-    retail_profit = (retail_price - wp) * qty
+        cur = conn.cursor()
 
-    verdict = "ACCEPT" if margin_pct >= 10 else "NEGOTIATE"
-    spoken = (
-        f"Wholesale quote for {display_name}: margin is {margin_pct:.1f}%. "
-        + ("Looks good, recommend accepting." if verdict == "ACCEPT" else "Margin is thin, try negotiating.")
-    )
-    screen_note = (
-        f"{display_name} | Retail: Rs {retail_price}/{unit} | Wholesale: Rs {wp} | "
-        f"Margin: {margin_pct:.1f}% | Profit on {qty} {unit}s: Rs {retail_profit:.2f} | {verdict}"
-    )
+        # Resolve item by SKU first, then fuzzy match
+        cur.execute(
+            "SELECT sku, display_name, price, unit FROM catalog_items WHERE sku = ? AND is_active = 1",
+            (item_name_or_sku,),
+        )
+        row = cur.fetchone()
 
-    return {
-        "success": True,
-        "status": verdict,
-        "spoken_summary": spoken,
-        "screen_note": screen_note,
-        "structured_data": {
-            "sku": sku,
-            "display_name": display_name,
-            "retail_price": retail_price,
-            "wholesale_price": wp,
-            "quantity": qty,
-            "unit": unit,
-            "margin_pct": round(margin_pct, 2),
-            "retail_profit": round(retail_profit, 2),
-            "verdict": verdict,
-        },
-        "_meta": {
-            "ui": {
-                "resourceUri": "ui://khata-card",
-                "invoking": f"Evaluating wholesale quote for {display_name}...",
-                "invoked": f"Wholesale quote evaluated for {display_name}",
-            }
-        },
-    }
+        if not row:
+            res = match_item(conn, item_name_or_sku)
+            if res["status"] == "SUCCESS":
+                sku = res["sku"]
+                display_name = res["display_name"]
+                retail_price = res["unit_price"]
+                unit = res["unit"]
+            else:
+                return {
+                    "success": False,
+                    "status": "ITEM_NOT_FOUND",
+                    "spoken_summary": f"Could not find '{item_name_or_sku}' in your catalog.",
+                    "screen_note": f"Item '{item_name_or_sku}' not found.",
+                    "structured_data": {},
+                }
+        else:
+            sku = row["sku"]
+            display_name = row["display_name"]
+            retail_price = row["price"]
+            unit = row["unit"]
+
+        margin_pct = ((retail_price - wp) / retail_price * 100) if retail_price > 0 else 0.0
+        retail_profit = (retail_price - wp) * qty
+
+        verdict = "ACCEPT" if margin_pct >= 10 else "NEGOTIATE"
+        spoken = (
+            f"Wholesale quote for {display_name}: margin is {margin_pct:.1f}%. "
+            + ("Looks good, recommend accepting." if verdict == "ACCEPT" else "Margin is thin, try negotiating.")
+        )
+        screen_note = (
+            f"{display_name} | Retail: Rs {retail_price}/{unit} | Wholesale: Rs {wp} | "
+            f"Margin: {margin_pct:.1f}% | Profit on {qty} {unit}s: Rs {retail_profit:.2f} | {verdict}"
+        )
+
+        return {
+            "success": True,
+            "status": verdict,
+            "spoken_summary": spoken,
+            "screen_note": screen_note,
+            "structured_data": {
+                "sku": sku,
+                "display_name": display_name,
+                "retail_price": retail_price,
+                "wholesale_price": wp,
+                "quantity": qty,
+                "unit": unit,
+                "margin_pct": round(margin_pct, 2),
+                "retail_profit": round(retail_profit, 2),
+                "verdict": verdict,
+            },
+            "_meta": {
+                "ui": {
+                    "resourceUri": "ui://khata-card",
+                    "invoking": f"Evaluating wholesale quote for {display_name}...",
+                    "invoked": f"Wholesale quote evaluated for {display_name}",
+                }
+            },
+        }
+    finally:
+        if should_close:
+            conn.close()

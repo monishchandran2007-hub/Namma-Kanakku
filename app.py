@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 import gradio as gr
 from server import app as starlette_app
-from database import get_db, seed_demo_data
+from database import seed_demo_data
 from ledger import get_customer_balance, log_credit_entry, undo_last_entry, get_overdue_accounts
 from data_ownership import evaluate_wholesale_quote
 
@@ -44,44 +44,19 @@ seed_demo_data()
 
 # 1. Action handlers for judges' interactive testing
 def test_balance(customer_name: str):
-    conn = get_db()
-    try:
-        res = get_customer_balance(conn, customer_name)
-        return res
-    finally:
-        conn.close()
+    return get_customer_balance(customer_name)
 
 def test_credit(customer_name: str, item_text: str, quantity: float):
-    conn = get_db()
-    try:
-        res = log_credit_entry(conn, customer_name, [{"item_name": item_text, "quantity": quantity}])
-        return res
-    finally:
-        conn.close()
+    return log_credit_entry(customer_name, [{"item_name": item_text, "quantity": float(quantity)}])
 
 def test_undo(customer_name: str):
-    conn = get_db()
-    try:
-        res = undo_last_entry(conn, customer_name)
-        return res
-    finally:
-        conn.close()
+    return undo_last_entry(customer_name)
 
 def test_overdue():
-    conn = get_db()
-    try:
-        res = get_overdue_accounts(conn)
-        return res
-    finally:
-        conn.close()
+    return get_overdue_accounts()
 
 def test_wholesale(item: str, wholesale_price: float, qty: float):
-    conn = get_db()
-    try:
-        res = evaluate_wholesale_quote(conn, item, wholesale_price, qty)
-        return res
-    finally:
-        conn.close()
+    return evaluate_wholesale_quote(item, float(wholesale_price), float(qty))
 
 # 2. Build Gradio Blocks Dashboard for Judges
 custom_css = """
@@ -196,9 +171,12 @@ if __name__ == "__main__":
         show_error=True,
     )
 
-    # Mount the MCP Starlette app (all routes: /mcp /widget /healthz /ledger)
-    # onto Gradio's FastAPI app. FastAPI checks its route list on every request
-    # so adding routes post-start is safe.
+    # Register Starlette routes (/mcp, /widget, /healthz, /ledger, /reset) directly
+    # onto Gradio's FastAPI app so /widget iframe, /mcp, and direct links work cleanly.
+    for route in reversed(starlette_app.routes):
+        gradio_fastapi.routes.insert(0, route)
+
+    # Also mount at /mcp-app as fallback
     gradio_fastapi.mount("/mcp-app", starlette_app)
 
     # Block main thread so the process stays alive
