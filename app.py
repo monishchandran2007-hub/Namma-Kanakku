@@ -11,11 +11,6 @@ Mounts:
 import os
 import sys
 
-# MUST be set before any HF/spaces import to disable the ZeroGPU startup hook.
-# Without this, spaces==0.51.x kills the process on CPU-only hardware because
-# it finds no @spaces.GPU-decorated function.
-os.environ["SPACES_ZERO_GPU"] = "0"  # Force-override; setdefault won't work if HF pre-sets this
-
 # Ensure local imports resolve
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -24,6 +19,25 @@ from server import app as starlette_app
 from database import get_db, seed_demo_data
 from ledger import get_customer_balance, log_credit_entry, undo_last_entry, get_overdue_accounts
 from data_ownership import evaluate_wholesale_quote
+
+# ── ZeroGPU compatibility ────────────────────────────────────────────────────
+# HF Spaces ZeroGPU service (port 7861) counts @spaces.GPU-registered functions
+# at startup. If the count is 0 it sends SIGTERM with "No @spaces.GPU function
+# detected". Namma-Kanakku is CPU-only but we must register ≥1 GPU function.
+# @spaces.GPU is a lightweight decorator: GPU is only ACQUIRED when the function
+# is actually CALLED. Since _gpu_warmup is never called, no GPU slot is used.
+try:
+    import spaces
+
+    @spaces.GPU
+    def _gpu_warmup():
+        """No-op placeholder — satisfies ZeroGPU startup count on CPU space."""
+        pass
+
+except Exception:
+    # spaces not installed (local dev / non-HF environment) — safe to ignore
+    pass
+# ─────────────────────────────────────────────────────────────────────────────
 
 # Ensure demo data is seeded
 seed_demo_data()
