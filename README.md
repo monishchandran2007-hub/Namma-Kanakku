@@ -1,3 +1,14 @@
+---
+title: Namma Kanakku
+emoji: 🏪
+colorFrom: blue
+colorTo: indigo
+sdk: gradio
+app_file: app.py
+pinned: false
+license: mit
+---
+
 # Namma-Kanakku (நம்ம கணக்கு) 🏪🎙️
 
 > **"A voice khata that learns your shop's language, keeps your customers' debts private, and never guesses with money."**
