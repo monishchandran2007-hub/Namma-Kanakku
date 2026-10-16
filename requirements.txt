@@ -5,4 +5,5 @@ uvicorn>=0.30.0
 starlette>=0.40.0
 pydantic>=2.10.0
 pytest>=8.0.0
-
+# Prevent GPU startup check from killing the process on CPU-only hardware
+spaces>=0.0.1
