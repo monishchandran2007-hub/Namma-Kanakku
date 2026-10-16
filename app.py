@@ -11,6 +11,11 @@ Mounts:
 import os
 import sys
 
+# MUST be set before any HF/spaces import to disable the ZeroGPU startup hook.
+# Without this, spaces==0.51.x kills the process on CPU-only hardware because
+# it finds no @spaces.GPU-decorated function.
+os.environ.setdefault("SPACES_ZERO_GPU", "0")
+
 # Ensure local imports resolve
 sys.path.insert(0, os.path.dirname(__file__))
 
