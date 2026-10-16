@@ -1,8 +1,9 @@
-# KiranaFlow - Pinned Dependencies
+# Namma-Kanakku Dependencies
 mcp==2.3.0
-rapidfuzz==3.14.6
-uvicorn==0.42.0
-starlette==0.52.1
-pydantic==2.12.5
-pytest==9.1.1
+rapidfuzz>=3.9.0
+uvicorn>=0.30.0
+starlette>=0.40.0
+pydantic>=2.10.0
+pytest>=8.0.0
 gradio>=4.0.0
+
