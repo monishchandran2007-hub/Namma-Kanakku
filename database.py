@@ -21,6 +21,9 @@ def get_connection(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn
 
+# Alias for convenience
+get_db = get_connection
+
 def init_db(db_path: str = DEFAULT_DB_PATH, reset: bool = False) -> None:
     conn = get_connection(db_path)
     cur = conn.cursor()
