@@ -157,6 +157,8 @@ with gr.Blocks(title="Namma-Kanakku (நம்ம கணக்கு) - Voice Kh
 app = gr.mount_gradio_app(starlette_app, demo, path="/")
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 7860))
+    # HF Spaces proxies to 7860; do NOT read the PORT env var — HF sets it to
+    # a reserved port (7861) that causes an "address already in use" bind error.
+    port = 7860
     print(f"Starting Namma-Kanakku on port {port}...")
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
