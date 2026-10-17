@@ -218,23 +218,20 @@ with gr.Blocks(title="Namma-Kanakku (நம்ம கணக்கு) - Voice Kh
         handle_natural_voice_command, inputs=[voice_input], outputs=[out_spoken_html, out_screen_html, out_card_html, out_raw_json]
     )
 
+# Register Starlette MCP & Counter Screen routes (/healthz, /widget, /mcp, /ledger, /api/state, /api/command, /)
+# directly into demo.app.routes BEFORE launch so they take absolute priority over the Gradio SPA catch-all
+for r in reversed(starlette_app.routes):
+    demo.app.routes.insert(0, r)
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 7860))
 
-    # Launch Gradio server
-    gradio_fastapi, _, _ = demo.launch(
+    # Launch Gradio server on HF Spaces port
+    demo.launch(
         server_name="0.0.0.0",
         server_port=port,
-        prevent_thread_lock=True,
+        prevent_thread_lock=False,
         share=False,
         show_error=True,
     )
-
-    # Register Starlette MCP & Counter Screen routes (/healthz, /widget, /mcp, /ledger, /api/state, /api/command, /)
-    # directly at the head of gradio_fastapi.routes so they take absolute priority over the SPA catch-all
-    for r in reversed(starlette_app.routes):
-        gradio_fastapi.routes.insert(0, r)
-
-    # Block main thread to keep service alive
-    demo.block_thread()
 
