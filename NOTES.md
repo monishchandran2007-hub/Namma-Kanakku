@@ -102,3 +102,46 @@ Confirmed facts extracted from official Amazon Developer documentation, Model Co
   - Build self-contained HTML widget `ui://khata-card` with postMessage handshake, light/dark mode, customer highlighting, itemized receipts.
 * **Stage 6 (Submission Documentation)**:
   - `README.md` with architecture diagram, `FRICTION_LOG.md` with real issues encountered, `PRODUCT_FEEDBACK.md`, and `DEMO_SCRIPT.md` under 3 minutes.
+
+---
+
+## 4. Intent Lexicon & Native Tamil Review Matrix
+
+All Tamil script entries seeded into the database `intent_lexicon` table are flagged with `# NEEDS_NATIVE_REVIEW` to allow local Tamil-speaking kirana shopkeepers to validate dialect variations and colloquial spoken forms.
+
+| Word / Phrase | Script / Lang | Event Type | Weight | Status & Notes |
+| :--- | :---: | :---: | :---: | :--- |
+| `கடன்` (Kadan) | Tamil (`ta`) | `CREDIT_SALE` | 1.0 | `# NEEDS_NATIVE_REVIEW` — Standard literary/spoken term for credit/loan. |
+| `பாக்கி` (Baakki) | Tamil (`ta`) | `CREDIT_SALE` | 0.8 | `# NEEDS_NATIVE_REVIEW` — Colloquial term meaning remaining balance or tab. |
+| `கணக்கு` (Kanakku) | Tamil (`ta`) | `CREDIT_SALE` | 1.0 | `# NEEDS_NATIVE_REVIEW` — Spoken shorthand for "put on my account" (*kanakkula*). |
+| `எழுதிக்கோ` (Ezhudhiko) | Tamil (`ta`) | `CREDIT_SALE` | 1.0 | `# NEEDS_NATIVE_REVIEW` — Informal command: "write it down". |
+| `எழுதிக்கொள்ளுங்கள்` | Tamil (`ta`) | `CREDIT_SALE` | 1.0 | `# NEEDS_NATIVE_REVIEW` — Polite honorific form: "please write it down". |
+| `பணம்` (Panam) | Tamil (`ta`) | `CASH_SALE` | 1.0 | `# NEEDS_NATIVE_REVIEW` — Common noun for cash/money. |
+| `காசு` (Kaasu) | Tamil (`ta`) | `CASH_SALE` | 1.0 | `# NEEDS_NATIVE_REVIEW` — Colloquial term for coins/cash payment. |
+| `ரூபாய்` (Roobai) | Tamil (`ta`) | `CASH_SALE` | 0.7 | `# NEEDS_NATIVE_REVIEW` — Currency unit (Rupees); denotes cash value context. |
+| `கொடுத்தார்` (Koduthaar) | Tamil (`ta`) | `PAYMENT_RECEIVED` | 1.0 | `# NEEDS_NATIVE_REVIEW` — Honorific past tense: "he/she gave [money]". |
+| `செலுத்தினார்` (Seluthinaar) | Tamil (`ta`) | `PAYMENT_RECEIVED` | 1.0 | `# NEEDS_NATIVE_REVIEW` — Formal verb: "paid/settled". |
+| `தீர்த்தார்` (Theerthaar) | Tamil (`ta`) | `PAYMENT_RECEIVED` | 1.0 | `# NEEDS_NATIVE_REVIEW` — Colloquial: "cleared the debt". |
+| `திரும்ப` (Thirumba) | Tamil (`ta`) | `RETURN` | 1.0 | `# NEEDS_NATIVE_REVIEW` — Adverb: "back / return". |
+| `திருப்பி` (Thiruppi) | Tamil (`ta`) | `RETURN` | 1.0 | `# NEEDS_NATIVE_REVIEW` — Verb participle: "returned / handed back". |
+| `சரக்கு` (Sarakku) | Tamil (`ta`) | `STOCK_PURCHASE` | 1.0 | `# NEEDS_NATIVE_REVIEW` — Universal commercial term for stock / goods. |
+| `மொத்த கொள்முதல்` | Tamil (`ta`) | `STOCK_PURCHASE` | 1.0 | `# NEEDS_NATIVE_REVIEW` — Wholesale procurement. |
+
+### Classification Architecture & Rules
+1. **No Customer Mentioned**:
+   - If items are recognized $\rightarrow$ default to `CASH_SALE`.
+   - Spoken feedback: "Cash sale of ₹[amount] logged."
+2. **Customer + Amount + Payment Cue (No Items)**:
+   - Matches `PAYMENT_RECEIVED`.
+   - Spoken feedback: "Payment of ₹[amount] received from [customer]." (NEVER speaks new balance).
+3. **Customer + Items + No Cues**:
+   - Query `customer_habit`:
+     - If customer has $\ge 3$ confirmations and $\ge 80\%$ dominance for `CREDIT_SALE` or `CASH_SALE`, auto-classify.
+     - Otherwise, disambiguate with ONE short question: *"Should I put this on [Customer]'s account or was it paid in cash?"* and write **0 rows** until confirmed.
+4. **Conflicting Cues**:
+   - If conflicting cues detected in utterance (e.g. "cash" and "udhaar"), write **0 rows** and ask clarifying question.
+5. **Multi-Item / Multi-Event Atomic Batch**:
+   - Process multiple items atomically. If any item is ambiguous, roll back entirely and ask.
+6. **Strict Discretion**:
+   - NEVER read out customer balances, outstanding amounts, or debt warnings over audio in receipt confirmation. Balance is spoken ONLY if shopkeeper explicitly asks via `ask_khata(question="what is Ramesh balance", kind="balance")`.
+

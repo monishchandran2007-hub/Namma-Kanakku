@@ -169,5 +169,44 @@ Directly inject the Starlette app routes at index 0 of Gradio's internal FastAPI
 for route in reversed(starlette_app.routes):
     gradio_fastapi.routes.insert(0, route)
 ```
-This guarantees `/mcp`, `/widget`, `/healthz`, and `/ledger` respond with their authentic payloads, while preserving Gradio's interactive UI at root.
+This temporarily bypassed the SPA catch-all, but still left Gradio's heavy frontend and developer-centric terminology in place.
+
+---
+
+## 9. Gradio UI Fragility & Dev Terminology Leaks → Transition to Pure ASGI Counter Screen
+
+### Friction
+Tester feedback highlighted that:
+1. Gradio's tabbed layout leaked backend tool names like `log_credit_entry` as "tab 1 / tab 3" labels, confusing shopkeepers.
+2. The UI broke unexpectedly on mobile viewports and required button clicks instead of voice-first automation.
+3. Gradio's internal client routing still occasionally shadowed `/api/state` and `/widget` when browser caching intervened.
+
+### Root Cause
+Gradio is primarily architected for machine learning model demos (inputs → predict → output) rather than real-time transactional point-of-sale systems. Its internal React/Svelte SPA hydration layer aggressively intercepts browser navigation and injects developer-oriented interface scaffolding.
+
+### Resolution & Workaround
+Eliminated Gradio entirely by migrating the Hugging Face Space from `sdk: gradio` to `sdk: docker`:
+1. Updated `README.md` metadata to `sdk: docker` with `app_port: 7860`.
+2. Created a security-compliant `Dockerfile` configuring non-root user `UID 1000` (`useradd -m -u 1000 user`) and exposing port 7860.
+3. Built a bespoke, lightweight, pure ASGI Counter Screen directly in Starlette (`server.py`) served at `/`.
+4. Zero developer jargon: completely removed tabs, "Run:" buttons, and tool name references. The UI now natively presents a high-contrast Kirana counter terminal with Web Speech recognition, real-time 2-second state polling (`/api/state`), live MCP Apps iframe preview (`/widget`), and instant audio readback toggles.
+
+---
+
+## 10. Multi-Item Batch Atomicity & Reversible Stock Inversion
+
+### Friction
+When a shopkeeper speaks a multi-item purchase (e.g. *"2 curds and 1 kg toor dal"*), standard voice skills often log items one-by-one. If the second item is ambiguous (e.g. *"and oil"*), traditional architectures save the first item and ask about the second. If the user cancels or walks away, the database is left in a corrupted, half-saved state. Furthermore, stock decrements were previously irreversible if an entry was undone.
+
+### Root Cause
+Decoupled multi-turn slot filling without database-level transactional boundaries causes partial commits.
+
+### Resolution & Workaround
+1. **Strict 2-Phase Atomic Execution**:
+   - Phase 1 (Validation): Every item in the batch is checked against `match_item`. If ANY item requires clarification (`NEEDS_CLARIFICATION`) or is unrecognized (`ITEM_NOT_RECOGNIZED`), the entire request immediately returns with a short question and **zero rows** are written to `ledger_entries`.
+   - Phase 2 (Commit): Only when 100% of items resolve are stock decrements applied and the ledger row committed.
+2. **Reversible Stock Delta Serialization**:
+   - Every transaction saves `stock_delta_json` (e.g. `{"curd_500ml": -2.0, "toor_dal": -1.0}`).
+   - On `fix_entry(action="undo")`, the engine parses `stock_delta_json` and inverts the sign (`stock = stock - delta`), restoring exact physical inventory alongside customer balances and last payment dates.
+
 

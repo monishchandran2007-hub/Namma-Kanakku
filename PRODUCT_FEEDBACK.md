@@ -69,3 +69,9 @@ In retail point-of-sale and financial contexts, voice assistants need a recogniz
 - What gets rendered silently on display (screen-only notes and UI cards).
 
 Formalizing this distinction in the Alexa+ tool schema specifications (e.g. `discreet_voice: boolean` or distinct `spoken_text` vs `visual_payload` contract) would establish an industry best practice for retail voice software.
+
+### 3.3 Explicit Multi-Item Batching & Transactional Boundaries in Tool Schemas
+When a customer orders multiple items at a counter (*"two curds and one packet oil"*), standard conversational pipelines sometimes trigger multiple independent tool invocations. If tool call 1 succeeds and tool call 2 fails, the ledger is left partially updated.
+**Recommendation**:
+Encourage or provide native schema conventions in the Alexa+ developer toolkit for atomic multi-event payloads (`events: list`), ensuring assistants pass composite orders in a single transactional turn rather than piecemeal.
+

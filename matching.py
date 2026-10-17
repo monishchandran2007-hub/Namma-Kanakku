@@ -349,13 +349,14 @@ def match_item(
         
         # Calculate pricing
         unit_price = item_data["price"]
+        qty_disp = int(qty_val) if qty_val.is_integer() else qty_val
         if item_data["is_loose"]:
             # Priced per kg
             line_total = round(qty_val * unit_price, 2)
-            display_qty = f"{qty_val} kg"
+            display_qty = f"{qty_disp} kg"
         else:
             line_total = round(qty_val * unit_price, 2)
-            display_qty = f"{qty_val} {item_data['unit']}"
+            display_qty = f"{qty_disp} {item_data['unit']}"
 
         return {
             "status": "SUCCESS",

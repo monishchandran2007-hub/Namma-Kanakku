@@ -3,11 +3,8 @@ title: Namma Kanakku
 emoji: 🏪
 colorFrom: blue
 colorTo: indigo
-sdk: gradio
-sdk_version: 5.20.0
-app_file: app.py
-python_version: '3.11'
-hardware: cpu-basic
+sdk: docker
+app_port: 7860
 pinned: false
 license: mit
 ---
@@ -24,12 +21,12 @@ license: mit
 
 ## 💡 The Problem & The Idea
 
-Millions of neighbourhood kirana and maligai shopkeepers across India manage daily credit (*khata* / *கடன் நோட்டு*) for regular customers on loose paper notebooks. In the rush of a counter with customers waiting:
-1. **Speech is naturally multilingual**: Customers order in mixed English, Tamil, and Tanglish (*"thayir"*, *"half kilo thuvaram paruppu"*, *"kadala ennai"*, *"arisi"*).
-2. **Debts are deeply sensitive**: Announcing a customer's total unpaid debt or over-limit warning aloud in earshot of other customers destroys trust and damages dignity.
-3. **Accuracy is non-negotiable**: A software assistant cannot "hallucinate" or guess with pricing or customer debt.
+Millions of neighbourhood kirana and maligai shopkeepers across India manage daily credit (*khata* / *கடன் நோட்டு*) for regular customers on loose paper notebooks. In the rush of a busy counter with hands full weighing dal or measuring oil:
+1. **Speech is naturally multilingual**: Regulars order in mixed English, Tamil, and Tanglish (*"Karthik 3B ku rendu thayir and oru kadala ennai, udhaar"*).
+2. **Debts are deeply sensitive**: Announcing a customer's total unpaid debt or over-limit warning aloud in earshot of other customers destroys trust and customer dignity.
+3. **Accuracy is non-negotiable**: A software assistant cannot guess with inventory or customer debt.
 
-**Namma-Kanakku** solves this with a privacy-first, deterministic Model Context Protocol (MCP) server connected to Alexa+.
+**Namma-Kanakku** solves this with a privacy-first, deterministic Model Context Protocol (MCP) server connected to Alexa+, paired with a pure ASGI Counter Screen.
 
 ---
 
@@ -39,32 +36,48 @@ Millions of neighbourhood kirana and maligai shopkeepers across India manage dai
  ┌─────────────────────────────────────────────────────────────┐
  │                  Alexa+ (Speech & Language)                 │
  │  • Speech-to-text (English, Tamil words, Tanglish)          │
- │  • Multilingual translation & slot extraction               │
- │  • Calls KiranaFlow MCP tools over Streamable HTTP (/mcp)   │
+ │  • Intent classification & slot extraction                  │
+ │  • Calls Namma-Kanakku MCP tools over Streamable HTTP (/mcp)│
  └──────────────────────────────┬──────────────────────────────┘
                                 │ JSON-RPC 2.0 (Streamable HTTP)
  ┌──────────────────────────────▼──────────────────────────────┐
- │             KiranaFlow MCP Server (Python 3.10+)            │
- │  NO LLMs • NO External APIs • 100% Deterministic & Private  │
+ │             Namma-Kanakku MCP Server & Counter Engine       │
+ │  NO External LLMs • 100% Deterministic Arithmetic & Privacy │
  │                                                             │
- │  1. Deterministic 6-Step Matching Pipeline:                 │
- │     Exact -> Phonetic -> Learned -> Rapidfuzz -> English    │
- │  2. Strict Discretion Rules:                                │
- │     Balances spoken ONLY in get_customer_balance            │
- │  3. Atomic Ledger Engine & Reversible Autoincrement Undo   │
- │  4. SQLite Persistence with Idempotent Demo Seeder          │
- │  5. MCP Apps Widget (`ui://khata-card`) + Screen Fallback   │
+ │  1. Human Front-Door MCP Tools:                             │
+ │     • write_entry: Single-turn or batch entry (Credit,      │
+ │       Cash, Payment, Return, Stock Purchase)                │
+ │     • fix_entry: Reversible undo & amend (restores balance, │
+ │       stock deltas, and last payment date)                  │
+ │     • ask_khata: Discreet balance & credit checks, daily    │
+ │       profit summaries, low stock warnings                  │
+ │     • update_shop: Teach shop vocabulary, prices, inventory │
+ │                                                             │
+ │  2. Data-Driven Intent Classification & Customer Habits:    │
+ │     • Intent Lexicon (English, Tanglish, Tamil script)      │
+ │     • Habit Promotion (>= 3 confirms, >= 80% dominance)     │
+ │     • Conflict detection (0 rows saved on ambiguity)        │
+ │                                                             │
+ │  3. Dual-Channel Presentation:                              │
+ │     • What Counter Hears: Audible spoken readback           │
+ │     • What Shopkeeper Sees: Confidential screen notes       │
+ │                                                             │
+ │  4. Inventory & Gross Profit Math:                          │
+ │     • Stock deltas & wholesale cost tracking per item       │
+ │                                                             │
+ │  5. Pure ASGI Counter Screen at / & Widget ui://khata-card  │
  └──────────────────────────────┬──────────────────────────────┘
                                 │
  ┌──────────────────────────────▼──────────────────────────────┐
  │             Local SQLite Database (`kirana.db`)             │
- │  • customers  • catalog_items  • item_aliases               │
- │  • learned_aliases  • ledger_entries (seq PK)               │
+ │  • customers  • catalog_items (stock, cost, reorder)        │
+ │  • item_aliases  • intent_lexicon  • customer_habit         │
+ │  • learned_aliases  • ledger_entries (seq PK, stock_delta)  │
  └─────────────────────────────────────────────────────────────┘
 ```
 
-- **Alexa+ is the language model**: It understands spoken speech, handles mixed Tanglish, and passes structured inputs (`item_name`, `quantity`, `unit`, `english_guess`, `original_spoken`).
-- **KiranaFlow contains NO LLM**: It executes arithmetic, deterministic row matching, atomic ledger updates, and discretion rules, returning structured data plus a discreet `spoken_summary` and `screen_note`.
+- **Alexa+ is the language model**: It understands spoken speech, handles mixed Tanglish, and passes structured inputs.
+- **Namma-Kanakku contains NO LLM in the accounting path**: It executes deterministic row matching, atomic ledger updates, stock management, and discretion rules, returning structured data plus a discreet `spoken_summary` and `screen_note`.
 
 ---
 
@@ -72,24 +85,25 @@ Millions of neighbourhood kirana and maligai shopkeepers across India manage dai
 
 | Rule | Implementation Details |
 | :--- | :--- |
-| **Strict Discretion** | `spoken_summary` for credit logs, payments, undos, and overdue accounts **never** mentions customer balances or limit statuses. Balance is spoken **only** when the shopkeeper explicitly asks via `get_customer_balance`. |
-| **Atomic Writes** | If any customer or item requires clarification or is unrecognized, **zero** rows are written to the database. |
-| **Spoken Read-Back** | Every successful entry confirms itemized totals followed by the safety prompt: *"Say undo if that's wrong."* |
-| **Reversible Undo** | Undoes credits or payments strictly by sequential autoincrement ID (`seq DESC`), never by clock timestamp. Restores customer balances and original payment dates. |
-| **Overdue Nudge** | When logging for a customer unpaid for 30+ days, adds a discreet visual `screen_note` suggesting a reminder (never spoken aloud). |
-| **Voice Data-Ownership** | Shopkeeper can teach custom aliases (`teach_item_alias`), update prices (`set_item_price`), add items (`add_catalog_item`), and register customers (`add_customer`). |
-| **Cold-Start Resilience** | Seeded with labelled fake demo data (`[DEMO DATA - NOT REAL]`). Re-seeds idempotently on startup so free-tier cloud sleep resets remain testable. |
+| **Strict Discretion** | Spoken readback for credit sales, cash sales, payments, returns, and undo **never** reveals customer balances or debt warnings. Customer balance is spoken **only** when the shopkeeper explicitly queries via `ask_khata(kind="balance")`. |
+| **Quiet Credit Check** | When evaluating customer credit (`ask_khata(kind="credit_check")`), Alexa speaks **strictly** *"Okay"* (if approved) or *"Please check the screen"* (if overdue or over limit). The customer's debt is never broadcast aloud. |
+| **Atomic Writes** | If any item or event in a multi-item batch fails to resolve, **zero rows** are written to the database. |
+| **Data-Driven Habits** | Customers with established habits ($\ge 3$ confirms, $\ge 80\%$ dominance) are automatically routed without manual button presses. Ambiguous entries ask ONE short question and save 0 rows. |
+| **Reversible Undo & Amend** | Undoes entries strictly by sequential autoincrement ID (`seq DESC`), never timestamps. Restores previous balance, last payment date, and exact inventory stock deltas. |
+| **Wholesale Profit Math** | Tracks retail price vs wholesale cost. `ask_khata(kind="today_summary")` reports cash sales, credit sales, collections, and estimated gross profit. |
+| **Voice Data-Ownership** | Shopkeepers can teach custom dialect aliases (`"pasu thayir means curd 500ml"`), set prices, register customers, and update stock. |
+| **Cold-Start Resilience** | Seeded with labelled fake demo data (`[DEMO DATA - NOT REAL]`). Re-seeds idempotently on startup. |
 
 ---
 
-## ⚡ 6-Step Deterministic Matching Pipeline
+## ⚡ Deterministic Matching Pipeline
 
 1. **Exact Alias Match**: Normalized text match against catalog aliases (Unicode Tamil script is transliterated to Latin first: e.g. `தயிர்` $\rightarrow$ `thayir`).
 2. **Phonetic Key Match**: Normalizes spelling variants by collapsing `th/t`, `dh/d`, `aa/a`, `ee/i`, `oo/u`, `zh/l`, `w/v`, and double letters (e.g., `thoovaram paruppu` $\rightarrow$ `Toor Dal`).
 3. **Learned Aliases**: If an ambiguous or custom word is confirmed $\ge 2$ times (and at least $2\times$ over any alternative), it auto-resolves with *"I understood X as Y"*.
 4. **Fuzzy Match (Rapidfuzz WRatio)**: Accepts only if `score >= 90`, maps to a unique SKU, and score gap to runner-up is $\ge 8$.
 5. **English Guess Fallback**: Runs the pipeline on Alexa+'s `english_guess` if the spoken word was unlisted.
-6. **Disambiguation Safety**: Generic words (`oil`, `dal`, `soap`, `rice`) return `NEEDS_CLARIFICATION` with up to 3 candidate options. Never silently guesses.
+6. **Disambiguation Safety**: Generic words (`oil`, `dal`, `soap`, `rice`) return `NEEDS_CLARIFICATION` with candidate options. Never silently guesses with money.
 
 ---
 
@@ -110,52 +124,36 @@ pip install -r requirements.txt
 ```bash
 pytest -v
 ```
-*(Runs 36 comprehensive automated tests verifying discretion, atomicity, matching, data-ownership, and MCP Apps widget contracts.)*
+*(Runs 74 comprehensive automated tests verifying discretion, atomicity, intent lexicon, customer habits, undo/amend, profit calculations, and Counter Screen contracts.)*
 
-### 4. Start the MCP Server
+### 4. Start the MCP Server & Counter Screen
 ```bash
 python server.py
 ```
-The server will start on `http://127.0.0.1:8000`:
-- **Streamable HTTP MCP Endpoint**: `http://127.0.0.1:8000/mcp`
-- **Fallback Live Ledger Dashboard**: `http://127.0.0.1:8000/ledger` (auto-refreshes every 5 seconds)
-- **MCP Apps Widget Inspector**: `http://127.0.0.1:8000/widget` (previews `ui://khata-card` in light/dark mode)
-- **Health Check**: `http://127.0.0.1:8000/healthz`
+The server will start on `http://127.0.0.1:7860`:
+- **Counter Screen**: `http://127.0.0.1:7860/` (pure ASGI, zero Gradio, responsive tablet UI with microphone support)
+- **Streamable HTTP MCP Endpoint**: `http://127.0.0.1:7860/mcp`
+- **MCP Apps Widget Preview**: `http://127.0.0.1:7860/widget` (previews `ui://khata-card` in light/dark mode)
+- **Real-Time State Polling API**: `http://127.0.0.1:7860/api/state`
+- **Fallback Live Ledger Dashboard**: `http://127.0.0.1:7860/ledger`
+- **Health Check**: `http://127.0.0.1:7860/healthz`
 
 ### 5. Run Smoke Test & Latency Benchmark
 In a separate terminal:
 ```bash
 python smoke_test.py
 ```
-*Outputs JSON-RPC validation, tool list discovery (10 tools), widget retrieval (`ui://khata-card`), and real 50-call latency benchmark:*
-- **p50 (median)**: **12.92 ms**
-- **p95**: **21.86 ms**
-- **Average**: **14.63 ms**
+*Outputs JSON-RPC validation, tool list discovery, widget retrieval (`ui://khata-card`), and real 50-call latency benchmark.*
 
 ---
 
 ## 📚 Submission Documentation
 
-- 🛠️ [NOTES.md](file:///d:/Amazon%20aws/NOTES.md): Architecture research, official API citations, and VERIFY matrix.
-- ⚠️ [FRICTION_LOG.md](file:///d:/Amazon%20aws/FRICTION_LOG.md): Authentic developer friction log covering Python MCP SDK 2.x migration, Windows terminal encoding, and partner preview gating.
-- 💡 [PRODUCT_FEEDBACK.md](file:///d:/Amazon%20aws/PRODUCT_FEEDBACK.md): Constructive feedback on the MCP Python SDK, Starlette ASGI layer, and Alexa+ multilingual tools.
-- 🎬 [DEMO_SCRIPT.md](file:///d:/Amazon%20aws/DEMO_SCRIPT.md): Complete 3-minute video submission script with 30s hook, Tanglish voice scenes, discretion rule demonstration, and shopkeeper perspective.
-
----
-
-## ☁️ Deployment Guide (Render Free Tier)
-
-Deploy as a **Free Web Service** on [Render](https://render.com) (no credit card required):
-
-| Setting | Value |
-| :--- | :--- |
-| **Environment** | `Python` |
-| **Build Command** | `pip install -r requirements.txt` |
-| **Start Command** | `python server.py` |
-| **Health Check Path** | `/healthz` |
-| **Environment Variables** | `PORT=10000`, `PYTHONUNBUFFERED=1`, `RESET_KEY=<optional-secret>` |
-
-A ready-to-use [render.yaml](file:///d:/Amazon%20aws/render.yaml) blueprint is included in this repository.
+- 🛠️ [NOTES.md](file:///d:/Amazon%20aws/NOTES.md): Architecture research, official API citations, VERIFY matrix, and Tamil Intent Lexicon table marked `# NEEDS_NATIVE_REVIEW`.
+- ⚠️ [FRICTION_LOG.md](file:///d:/Amazon%20aws/FRICTION_LOG.md): Authentic developer friction log covering Python MCP SDK 2.x migration, Gradio SPA shadowing, Windows terminal encoding, and partner preview gating.
+- 💡 [PRODUCT_FEEDBACK.md](file:///d:/Amazon%20aws/PRODUCT_FEEDBACK.md): Constructive feedback on the MCP Python SDK, Streamable HTTP transport, UI metadata rendering, and Alexa+ multilingual tools.
+- 🎬 [DEMO_SCRIPT.md](file:///d:/Amazon%20aws/DEMO_SCRIPT.md): Complete 3-minute video submission script with 30s hook, Tanglish voice scenes, quiet credit check demonstration, and profit reporting.
+- 📜 [TERMS.md](file:///d:/Amazon%20aws/TERMS.md) & [PRIVACY.md](file:///d:/Amazon%20aws/PRIVACY.md): Terms of service and privacy policy ensuring shopkeeper local data ownership.
 
 ---
 
