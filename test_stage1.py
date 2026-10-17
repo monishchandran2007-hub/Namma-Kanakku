@@ -55,8 +55,11 @@ def test_db():
     os.close(fd)
     seed_demo_data(db_path=path, force=True)
     yield path
-    if os.path.exists(path):
-        os.remove(path)
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+    except Exception:
+        pass
 
 # Test 1: Ambiguous customer
 def test_ambiguous_customer(test_db):
@@ -87,6 +90,12 @@ def test_ambiguous_item_oil(test_db):
 
 # Test 4: Unknown item saves nothing
 def test_unknown_item_saves_nothing(test_db):
+    conn = get_connection(test_db)
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM ledger_entries")
+    count_before = cur.fetchone()[0]
+    conn.close()
+
     res = log_credit_entry("Ramesh Teacher", [{"item_name": "unknown_spaceship_part", "quantity": 1}], db_path=test_db)
     assert res["success"] is False
     assert res["status"] == "ITEM_NOT_RECOGNIZED"
@@ -94,7 +103,7 @@ def test_unknown_item_saves_nothing(test_db):
     conn = get_connection(test_db)
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM ledger_entries")
-    assert cur.fetchone()[0] == 0
+    assert cur.fetchone()[0] == count_before
     conn.close()
 
 # Test 5: Half kilo toor dal
@@ -201,6 +210,14 @@ def test_learned_alias_promotion(test_db):
 
 # Test 13: Atomicity (multi-item partial failure writes 0 rows)
 def test_atomicity_multi_item_failure(test_db):
+    conn = get_connection(test_db)
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM ledger_entries")
+        count_before = cur.fetchone()[0]
+    finally:
+        conn.close()
+
     items = [
         {"item_name": "toor dal", "quantity": 1},
         {"item_name": "non_existent_unobtanium", "quantity": 1}
@@ -209,14 +226,16 @@ def test_atomicity_multi_item_failure(test_db):
     assert res["success"] is False
 
     conn = get_connection(test_db)
-    cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM ledger_entries")
-    assert cur.fetchone()[0] == 0
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM ledger_entries")
+        assert cur.fetchone()[0] == count_before
 
-    # Customer balance must remain unchanged
-    cur.execute("SELECT current_balance FROM customers WHERE name = 'Ramesh Teacher'")
-    assert cur.fetchone()[0] == 450.0
-    conn.close()
+        # Customer balance must remain unchanged
+        cur.execute("SELECT current_balance FROM customers WHERE name = 'Ramesh Teacher'")
+        assert cur.fetchone()[0] == 450.0
+    finally:
+        conn.close()
 
 # Test 14: Payment capped at balance
 def test_payment_capped_at_balance(test_db):

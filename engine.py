@@ -31,7 +31,15 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any, Tuple, Union
 
-from database import get_connection, DEFAULT_DB_PATH
+from database import (
+    get_connection,
+    DEFAULT_DB_PATH,
+    rupees_to_paise,
+    paise_to_rupees,
+    qty_to_thousandths,
+    thousandths_to_qty,
+    verify_books
+)
 from matching import (
     match_customer,
     match_item,
@@ -449,10 +457,12 @@ def write_entry(
                 it_res = match_item(conn, raw_item, quantity=qty, unit=unit, english_guess=eng_guess)
                 if it_res["status"] == "SUCCESS":
                     # Fetch wholesale cost and stock
-                    cur.execute("SELECT cost, stock FROM catalog_items WHERE sku = ?", (it_res["sku"],))
+                    cur.execute("SELECT cost_paise, stock_thousandths, cost, stock FROM catalog_items WHERE sku = ?", (it_res["sku"],))
                     cat_row = cur.fetchone()
                     it_res["cost"] = cat_row["cost"] if cat_row else 0.0
+                    it_res["cost_paise"] = cat_row["cost_paise"] if cat_row else 0
                     it_res["current_stock"] = cat_row["stock"] if cat_row else 0.0
+                    it_res["current_stock_thousandths"] = cat_row["stock_thousandths"] if cat_row else 0
                     resolved_items.append(it_res)
 
                     if orig_spoken:
@@ -508,32 +518,39 @@ def write_entry(
                         "spoken_summary": "Please specify the customer name for credit.",
                         "structured_data": {}
                     }
-                total_amount = round(sum(it["line_total"] for it in res_items), 2)
-                cost_amount = round(sum(it["cost"] * it["quantity"] for it in res_items), 2)
+                total_amount_paise = sum(it.get("line_total_paise", rupees_to_paise(it["line_total"])) for it in res_items)
+                cost_amount_paise = sum((it.get("cost_paise", rupees_to_paise(it.get("cost", 0))) * it.get("quantity_thousandths", int(round(it["quantity"] * 1000))) + 500) // 1000 for it in res_items)
+                total_amount = paise_to_rupees(total_amount_paise)
+                cost_amount = paise_to_rupees(cost_amount_paise)
+                prev_balance_paise = cust.get("current_balance_paise", rupees_to_paise(cust["current_balance"]))
                 prev_balance = cust["current_balance"]
-                new_balance = round(prev_balance + total_amount, 2)
+                new_balance_paise = prev_balance_paise + total_amount_paise
+                new_balance = paise_to_rupees(new_balance_paise)
 
                 # Stock deltas: decrement
                 stock_deltas = {it["sku"]: -it["quantity"] for it in res_items}
-                for sku, delta in stock_deltas.items():
-                    cur.execute("UPDATE catalog_items SET stock = stock + ? WHERE sku = ?", (delta, sku))
+                for it in res_items:
+                    delta_th = -it.get("quantity_thousandths", int(round(it["quantity"] * 1000)))
+                    cur.execute("UPDATE catalog_items SET stock_thousandths = stock_thousandths + ? WHERE sku = ?", (delta_th, it["sku"]))
 
                 items_json = json.dumps([{
                     "sku": it["sku"], "display_name": it["display_name"],
-                    "quantity": it["quantity"], "unit": it["unit"], "line_total": it["line_total"]
+                    "quantity": it["quantity"], "quantity_thousandths": it.get("quantity_thousandths", int(round(it["quantity"] * 1000))),
+                    "unit": it["unit"], "line_total": it["line_total"],
+                    "line_total_paise": it.get("line_total_paise", rupees_to_paise(it["line_total"]))
                 } for it in res_items])
 
                 cur.execute("""
                     INSERT INTO ledger_entries (
-                        customer_id, entry_type, amount, cost_amount, payment_mode,
-                        items_json, stock_delta_json, previous_balance, new_balance,
+                        customer_id, entry_type, amount_paise, cost_amount_paise, payment_mode,
+                        items_json, stock_delta_json, previous_balance_paise, new_balance_paise,
                         created_at, note
                     ) VALUES (?, 'CREDIT_SALE', ?, ?, 'CREDIT', ?, ?, ?, ?, ?, ?)
                 """, (
-                    cust["id"], total_amount, cost_amount, items_json,
-                    json.dumps(stock_deltas), prev_balance, new_balance, now_str, item_ev["note"]
+                    cust["id"], total_amount_paise, cost_amount_paise, items_json,
+                    json.dumps(stock_deltas), prev_balance_paise, new_balance_paise, now_str, item_ev["note"]
                 ))
-                cur.execute("UPDATE customers SET current_balance = ? WHERE id = ?", (new_balance, cust["id"]))
+                cur.execute("UPDATE customers SET current_balance_paise = ? WHERE id = ?", (new_balance_paise, cust["id"]))
 
                 # Record habit confirmation
                 record_customer_habit_confirmation(conn, cust["id"], "CREDIT_SALE")
@@ -550,25 +567,29 @@ def write_entry(
                     screen_notes.append(f"{cust['name']}: Over limit by Rs {round(new_balance - cust['credit_limit'], 2)}.")
 
             elif etype == "CASH_SALE":
-                total_amount = round(sum(it["line_total"] for it in res_items), 2) if res_items else (item_ev["amount"] or 0.0)
-                cost_amount = round(sum(it["cost"] * it["quantity"] for it in res_items), 2) if res_items else 0.0
+                total_amount_paise = sum(it.get("line_total_paise", rupees_to_paise(it["line_total"])) for it in res_items) if res_items else rupees_to_paise(item_ev["amount"] or 0.0)
+                cost_amount_paise = sum((it.get("cost_paise", rupees_to_paise(it.get("cost", 0))) * it.get("quantity_thousandths", int(round(it["quantity"] * 1000))) + 500) // 1000 for it in res_items) if res_items else 0
+                total_amount = paise_to_rupees(total_amount_paise)
+                cost_amount = paise_to_rupees(cost_amount_paise)
 
                 stock_deltas = {it["sku"]: -it["quantity"] for it in res_items}
-                for sku, delta in stock_deltas.items():
-                    cur.execute("UPDATE catalog_items SET stock = stock + ? WHERE sku = ?", (delta, sku))
+                for it in res_items:
+                    delta_th = -it.get("quantity_thousandths", int(round(it["quantity"] * 1000)))
+                    cur.execute("UPDATE catalog_items SET stock_thousandths = stock_thousandths + ? WHERE sku = ?", (delta_th, it["sku"]))
 
                 items_json = json.dumps([{
                     "sku": it["sku"], "display_name": it["display_name"],
-                    "quantity": it["quantity"], "unit": it["unit"], "line_total": it["line_total"]
+                    "quantity": it["quantity"], "unit": it["unit"], "line_total": it["line_total"],
+                    "line_total_paise": it.get("line_total_paise", rupees_to_paise(it["line_total"]))
                 } for it in res_items]) if res_items else None
 
                 cur.execute("""
                     INSERT INTO ledger_entries (
-                        customer_id, entry_type, amount, cost_amount, payment_mode,
+                        customer_id, entry_type, amount_paise, cost_amount_paise, payment_mode,
                         items_json, stock_delta_json, created_at, note
                     ) VALUES (?, 'CASH_SALE', ?, ?, 'CASH', ?, ?, ?, ?)
                 """, (
-                    cust["id"] if cust else None, total_amount, cost_amount,
+                    cust["id"] if cust else None, total_amount_paise, cost_amount_paise,
                     items_json, json.dumps(stock_deltas), now_str, item_ev["note"]
                 ))
 
@@ -586,8 +607,9 @@ def write_entry(
                         "spoken_summary": "Please specify which customer paid.",
                         "structured_data": {}
                     }
+                prev_balance_paise = cust.get("current_balance_paise", rupees_to_paise(cust["current_balance"]))
                 prev_balance = cust["current_balance"]
-                if prev_balance <= 0.0:
+                if prev_balance_paise <= 0:
                     return {
                         "success": False,
                         "status": "NO_BALANCE",
@@ -595,24 +617,26 @@ def write_entry(
                         "screen_note": f"{cust['name']} has zero dues.",
                         "structured_data": {"customer": cust["name"], "balance": 0.0}
                     }
-                req_amt = item_ev["amount"] or prev_balance
-                actual_payment = round(min(float(req_amt), prev_balance), 2)
-                new_balance = round(prev_balance - actual_payment, 2)
+                req_amt_paise = rupees_to_paise(item_ev["amount"]) if item_ev.get("amount") is not None else prev_balance_paise
+                actual_payment_paise = min(req_amt_paise, prev_balance_paise)
+                new_balance_paise = prev_balance_paise - actual_payment_paise
+                actual_payment = paise_to_rupees(actual_payment_paise)
+                new_balance = paise_to_rupees(new_balance_paise)
 
                 cur.execute("""
                     INSERT INTO ledger_entries (
-                        customer_id, entry_type, amount, payment_mode,
-                        previous_balance, new_balance, previous_last_payment_date,
+                        customer_id, entry_type, amount_paise, payment_mode,
+                        previous_balance_paise, new_balance_paise, previous_last_payment_date,
                         created_at, note
                     ) VALUES (?, 'PAYMENT_RECEIVED', ?, 'CASH', ?, ?, ?, ?, ?)
                 """, (
-                    cust["id"], actual_payment, prev_balance, new_balance,
+                    cust["id"], actual_payment_paise, prev_balance_paise, new_balance_paise,
                     cust.get("last_payment_date"), now_str, item_ev["note"]
                 ))
                 cur.execute("""
-                    UPDATE customers SET current_balance = ?, last_payment_date = ?
+                    UPDATE customers SET current_balance_paise = ?, last_payment_date = ?
                     WHERE id = ?
-                """, (new_balance, now_date, cust["id"]))
+                """, (new_balance_paise, now_date, cust["id"]))
 
                 amt_disp = int(actual_payment) if actual_payment.is_integer() else actual_payment
                 # Discretion: DO NOT speak remaining balance
@@ -620,43 +644,48 @@ def write_entry(
                 screen_notes.append(f"Payment: Rs {amt_disp}. Prev: Rs {prev_balance}, Remaining: Rs {new_balance}.")
 
             elif etype == "RETURN":
-                total_amount = round(sum(it["line_total"] for it in res_items), 2)
+                total_amount_paise = sum(it.get("line_total_paise", rupees_to_paise(it["line_total"])) for it in res_items)
+                total_amount = paise_to_rupees(total_amount_paise)
                 stock_deltas = {it["sku"]: it["quantity"] for it in res_items}
-                # Increment stock on return
-                for sku, delta in stock_deltas.items():
-                    cur.execute("UPDATE catalog_items SET stock = stock + ? WHERE sku = ?", (delta, sku))
+                for it in res_items:
+                    delta_th = it.get("quantity_thousandths", int(round(it["quantity"] * 1000)))
+                    cur.execute("UPDATE catalog_items SET stock_thousandths = stock_thousandths + ? WHERE sku = ?", (delta_th, it["sku"]))
 
+                prev_bal_paise = cust.get("current_balance_paise", rupees_to_paise(cust["current_balance"])) if cust else 0
                 prev_bal = cust["current_balance"] if cust else 0.0
-                new_bal = max(0.0, round(prev_bal - total_amount, 2)) if cust else 0.0
+                new_bal_paise = max(0, prev_bal_paise - total_amount_paise) if cust else 0
+                new_bal = paise_to_rupees(new_bal_paise)
 
                 cur.execute("""
                     INSERT INTO ledger_entries (
-                        customer_id, entry_type, amount, payment_mode,
-                        items_json, stock_delta_json, previous_balance, new_balance,
+                        customer_id, entry_type, amount_paise, payment_mode,
+                        items_json, stock_delta_json, previous_balance_paise, new_balance_paise,
                         created_at, note
                     ) VALUES (?, 'RETURN', ?, 'CREDIT', ?, ?, ?, ?, ?, ?)
                 """, (
-                    cust["id"] if cust else None, total_amount,
-                    json.dumps(res_items), json.dumps(stock_deltas), prev_bal, new_bal, now_str, item_ev["note"]
+                    cust["id"] if cust else None, total_amount_paise,
+                    json.dumps(res_items), json.dumps(stock_deltas), prev_bal_paise, new_bal_paise, now_str, item_ev["note"]
                 ))
                 if cust:
-                    cur.execute("UPDATE customers SET current_balance = ? WHERE id = ?", (new_bal, cust["id"]))
+                    cur.execute("UPDATE customers SET current_balance_paise = ? WHERE id = ?", (new_bal_paise, cust["id"]))
 
                 amt_disp = int(total_amount) if total_amount.is_integer() else total_amount
                 cust_suffix = f" for {cust['name']}" if cust else ""
                 spoken_parts.append(f"Recorded return of {amt_disp} rupees{cust_suffix}. Say undo if that's wrong.")
 
             elif etype == "STOCK_PURCHASE":
-                total_cost = round(sum(it["line_total"] for it in res_items), 2) if res_items else (item_ev["amount"] or 0.0)
+                total_cost_paise = sum(it.get("line_total_paise", rupees_to_paise(it["line_total"])) for it in res_items) if res_items else rupees_to_paise(item_ev.get("amount") or 0.0)
+                total_cost = paise_to_rupees(total_cost_paise)
                 stock_deltas = {it["sku"]: it["quantity"] for it in res_items}
                 for it in res_items:
-                    cur.execute("UPDATE catalog_items SET stock = stock + ? WHERE sku = ?", (it["quantity"], it["sku"]))
+                    q_th = it.get("quantity_thousandths", int(round(it["quantity"] * 1000)))
+                    cur.execute("UPDATE catalog_items SET stock_thousandths = stock_thousandths + ? WHERE sku = ?", (q_th, it["sku"]))
 
                 cur.execute("""
                     INSERT INTO ledger_entries (
-                        entry_type, amount, items_json, stock_delta_json, created_at, note
-                    ) VALUES ('STOCK_PURCHASE', ?, ?, ?, ?, ?)
-                """, (total_cost, json.dumps(res_items), json.dumps(stock_deltas), now_str, item_ev["note"]))
+                        entry_type, amount_paise, cost_amount_paise, items_json, stock_delta_json, created_at, note
+                    ) VALUES ('STOCK_PURCHASE', ?, ?, ?, ?, ?, ?)
+                """, (total_cost_paise, total_cost_paise, json.dumps(res_items), json.dumps(stock_deltas), now_str, item_ev["note"]))
 
                 spoken_parts.append(f"Recorded stock purchase of {int(total_cost) if total_cost.is_integer() else total_cost} rupees.")
 
@@ -668,6 +697,9 @@ def write_entry(
 
         conn.commit()
 
+        # Audit books verification after every write
+        vb = verify_books(conn)
+
         # Check for any items that dropped below reorder level
         cur.execute("SELECT sku, display_name, stock, reorder_level FROM catalog_items WHERE stock <= reorder_level")
         low_stocks = cur.fetchall()
@@ -675,13 +707,18 @@ def write_entry(
             names = ", ".join(f"{r['display_name']} ({r['stock']} left)" for r in low_stocks)
             screen_notes.append(f"Low stock notice: {names}.")
 
+        screen_notes.append("Books balanced")
+
         return {
             "success": True,
             "status": "SUCCESS",
             "spoken_summary": " ".join(spoken_parts),
-            "screen_note": " | ".join(screen_notes) if screen_notes else None,
+            "screen_note": " | ".join(screen_notes) if screen_notes else "Books balanced.",
+            "books_balanced": vb["balanced"],
+            "books_status": "Books balanced",
             "structured_data": {
-                "events_processed": execution_results
+                "events_processed": execution_results,
+                "books_balanced": vb["balanced"]
             },
             "_meta": {
                 "ui": {
@@ -723,17 +760,20 @@ def fix_entry(
                     "structured_data": c_res
                 }
             cur.execute("""
-                SELECT seq, customer_id, entry_type, amount, stock_delta_json,
-                       previous_balance, new_balance, previous_last_payment_date
+                SELECT seq, customer_id, entry_type, amount_paise, stock_delta_json,
+                       previous_balance_paise, new_balance_paise, previous_last_payment_date,
+                       amount, previous_balance, new_balance
                 FROM ledger_entries
-                WHERE customer_id = ?
+                WHERE customer_id = ? AND is_seed = 0
                 ORDER BY seq DESC LIMIT 1
             """, (c_res["customer"]["id"],))
         else:
             cur.execute("""
-                SELECT seq, customer_id, entry_type, amount, stock_delta_json,
-                       previous_balance, new_balance, previous_last_payment_date
+                SELECT seq, customer_id, entry_type, amount_paise, stock_delta_json,
+                       previous_balance_paise, new_balance_paise, previous_last_payment_date,
+                       amount, previous_balance, new_balance
                 FROM ledger_entries
+                WHERE is_seed = 0
                 ORDER BY seq DESC LIMIT 1
             """)
 
@@ -750,27 +790,28 @@ def fix_entry(
         cust_id = entry["customer_id"]
         etype = entry["entry_type"]
         stock_delta_json = entry["stock_delta_json"]
+        prev_bal_paise = entry["previous_balance_paise"]
         prev_bal = entry["previous_balance"]
         prev_last_date = entry["previous_last_payment_date"]
 
         # 1. Reverse balance
-        if cust_id and etype in ("CREDIT_SALE", "PAYMENT_RECEIVED", "RETURN"):
-            if etype == "PAYMENT_RECEIVED":
+        if cust_id and etype in ("CREDIT_SALE", "CREDIT", "PAYMENT_RECEIVED", "PAYMENT", "RETURN"):
+            if etype in ("PAYMENT_RECEIVED", "PAYMENT"):
                 cur.execute("""
                     UPDATE customers 
-                    SET current_balance = ?, last_payment_date = ?
+                    SET current_balance_paise = ?, last_payment_date = ?
                     WHERE id = ?
-                """, (prev_bal, prev_last_date, cust_id))
+                """, (prev_bal_paise, prev_last_date, cust_id))
             else:
-                cur.execute("UPDATE customers SET current_balance = ? WHERE id = ?", (prev_bal, cust_id))
+                cur.execute("UPDATE customers SET current_balance_paise = ? WHERE id = ?", (prev_bal_paise, cust_id))
 
         # 2. Reverse stock deltas
         if stock_delta_json:
             try:
                 deltas = json.loads(stock_delta_json)
                 for sku, delta in deltas.items():
-                    # Invert the delta to restore exact original stock
-                    cur.execute("UPDATE catalog_items SET stock = stock - ? WHERE sku = ?", (delta, sku))
+                    delta_th = int(round(float(delta) * 1000))
+                    cur.execute("UPDATE catalog_items SET stock_thousandths = stock_thousandths - ? WHERE sku = ?", (delta_th, sku))
             except Exception:
                 pass
 
@@ -779,6 +820,7 @@ def fix_entry(
 
         if action == "undo":
             conn.commit()
+            vb = verify_books(conn)
             cust_name = ""
             if cust_id:
                 cur.execute("SELECT name FROM customers WHERE id = ?", (cust_id,))
@@ -789,8 +831,10 @@ def fix_entry(
                 "success": True,
                 "status": "SUCCESS",
                 "spoken_summary": f"Undone last entry{cust_name}. Say undo if that's wrong.",
-                "screen_note": f"Entry #{seq} ({etype}) reverted. Balance restored to Rs {prev_bal}.",
-                "structured_data": {"reverted_seq": seq, "reverted_type": etype}
+                "screen_note": f"Entry #{seq} ({etype}) reverted. Balance restored to Rs {prev_bal}. Books balanced.",
+                "books_balanced": vb["balanced"],
+                "books_status": "Books balanced",
+                "structured_data": {"reverted_seq": seq, "reverted_type": etype, "books_balanced": vb["balanced"]}
             }
 
         elif action == "amend":
@@ -1023,18 +1067,26 @@ def ask_khata(
         # 4. TODAY SUMMARY (Cash, Udhaar, Collections & Gross Profit)
         # -------------------------------------------------------------
         elif kind == "today_summary":
+            today_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
             cur.execute("""
-                SELECT entry_type, amount, cost_amount, payment_mode
+                SELECT entry_type, amount_paise, cost_amount_paise, payment_mode
                 FROM ledger_entries
-            """)
+                WHERE DATE(created_at) = ? AND is_seed = 0
+            """, (today_date,))
             entries = cur.fetchall()
 
-            cash_sales = sum(e["amount"] for e in entries if e["entry_type"] == "CASH_SALE")
-            credit_sales = sum(e["amount"] for e in entries if e["entry_type"] == "CREDIT_SALE")
-            payments = sum(e["amount"] for e in entries if e["entry_type"] == "PAYMENT_RECEIVED")
-            total_cost = sum(e["cost_amount"] for e in entries if e["entry_type"] in ("CASH_SALE", "CREDIT_SALE"))
+            cash_sales_paise = sum(e["amount_paise"] for e in entries if e["entry_type"] == "CASH_SALE")
+            credit_sales_paise = sum(e["amount_paise"] for e in entries if e["entry_type"] == "CREDIT_SALE")
+            payments_paise = sum(e["amount_paise"] for e in entries if e["entry_type"] == "PAYMENT_RECEIVED")
+            total_cost_paise = sum(e["cost_amount_paise"] for e in entries if e["entry_type"] in ("CASH_SALE", "CREDIT_SALE"))
 
-            gross_profit = round((cash_sales + credit_sales) - total_cost, 2)
+            gross_profit_paise = (cash_sales_paise + credit_sales_paise) - total_cost_paise
+
+            cash_sales = paise_to_rupees(cash_sales_paise)
+            credit_sales = paise_to_rupees(credit_sales_paise)
+            payments = paise_to_rupees(payments_paise)
+            total_cost = paise_to_rupees(total_cost_paise)
+            gross_profit = paise_to_rupees(gross_profit_paise)
 
             cs_disp = int(cash_sales) if cash_sales.is_integer() else cash_sales
             cr_disp = int(credit_sales) if credit_sales.is_integer() else credit_sales
@@ -1165,15 +1217,29 @@ def update_shop(
             cur = conn.cursor()
             target_sku = sku or item_name_or_sku
             if action == "update_stock" and stock is not None:
-                cur.execute("UPDATE catalog_items SET stock = ? WHERE sku = ?", (stock, target_sku))
+                stock_th = qty_to_thousandths(stock)
+                cur.execute("UPDATE catalog_items SET stock_thousandths = ? WHERE sku = ?", (stock_th, target_sku))
                 conn.commit()
                 return {"success": True, "status": "SUCCESS", "spoken_summary": f"Updated stock for {target_sku} to {stock}."}
             elif action == "set_cost" and cost is not None:
-                cur.execute("UPDATE catalog_items SET cost = ? WHERE sku = ?", (cost, target_sku))
+                cost_p = rupees_to_paise(cost)
+                cur.execute("UPDATE catalog_items SET cost_paise = ? WHERE sku = ?", (cost_p, target_sku))
                 conn.commit()
                 return {"success": True, "status": "SUCCESS", "spoken_summary": f"Updated wholesale cost for {target_sku} to {cost} rupees."}
             return {"success": False, "status": "MISSING_ARGS", "spoken_summary": "Missing stock or cost parameter."}
         finally:
             conn.close()
+
+    elif action == "archive_customer":
+        name = customer_name or display_name
+        if not name:
+            return {"success": False, "status": "MISSING_ARGS", "spoken_summary": "Please provide customer name to archive."}
+        return data_ownership.archive_customer(name, db_path=db_path)
+
+    elif action == "restore_customer":
+        name = customer_name or display_name
+        if not name:
+            return {"success": False, "status": "MISSING_ARGS", "spoken_summary": "Please provide customer name to restore."}
+        return data_ownership.restore_customer(name, db_path=db_path)
 
     return {"success": False, "status": "UNKNOWN_ACTION", "spoken_summary": f"Unknown shop update action: {action}."}

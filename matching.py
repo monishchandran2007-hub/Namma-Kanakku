@@ -173,7 +173,7 @@ def match_customer(conn: sqlite3.Connection, raw_name: str) -> Dict[str, Any]:
     clean_name = " ".join(words) if words else norm
 
     cur = conn.cursor()
-    cur.execute("SELECT id, name, phone, credit_limit, current_balance, last_payment_date FROM customers")
+    cur.execute("SELECT id, name, phone, credit_limit_paise, current_balance_paise, credit_limit, current_balance, last_payment_date FROM customers WHERE is_archived = 0")
     customers = [dict(row) for row in cur.fetchall()]
 
     # 1. Exact match
@@ -234,7 +234,7 @@ def match_item(
     cur = conn.cursor()
 
     # Load all catalog items
-    cur.execute("SELECT sku, display_name, price, unit, is_loose FROM catalog_items WHERE is_active = 1")
+    cur.execute("SELECT sku, display_name, price_paise, cost_paise, stock_thousandths, reorder_level_thousandths, price, cost, stock, reorder_level, unit, is_loose FROM catalog_items WHERE is_active = 1")
     catalog = {row["sku"]: dict(row) for row in cur.fetchall()}
 
     # Load all aliases
@@ -347,15 +347,19 @@ def match_item(
         sku, match_type, learned_note = match_result
         item_data = catalog[sku]
         
-        # Calculate pricing
+        # Calculate pricing with exact integer paise math
         unit_price = item_data["price"]
+        unit_price_paise = item_data.get("price_paise") or int(round(unit_price * 100))
+        cost_paise = item_data.get("cost_paise") or int(round(item_data.get("cost", 0.0) * 100))
+        qty_thousandths = int(round(qty_val * 1000))
+        line_total_paise = (unit_price_paise * qty_thousandths + 500) // 1000
+        line_total = line_total_paise / 100.0
+
         qty_disp = int(qty_val) if qty_val.is_integer() else qty_val
         if item_data["is_loose"]:
             # Priced per kg
-            line_total = round(qty_val * unit_price, 2)
             display_qty = f"{qty_disp} kg"
         else:
-            line_total = round(qty_val * unit_price, 2)
             display_qty = f"{qty_disp} {item_data['unit']}"
 
         return {
@@ -363,9 +367,13 @@ def match_item(
             "sku": sku,
             "display_name": item_data["display_name"],
             "quantity": qty_val,
+            "quantity_thousandths": qty_thousandths,
             "unit": item_data["unit"],
             "unit_price": unit_price,
+            "unit_price_paise": unit_price_paise,
+            "cost_paise": cost_paise,
             "line_total": line_total,
+            "line_total_paise": line_total_paise,
             "display_qty": display_qty,
             "match_type": match_type,
             "learned_note": learned_note,

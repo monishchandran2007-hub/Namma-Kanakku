@@ -28,8 +28,11 @@ def test_db():
     os.close(fd)
     seed_demo_data(db_path=path, force=True)
     yield path
-    if os.path.exists(path):
-        os.remove(path)
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+    except Exception:
+        pass
 
 # Test 1: Teach then use
 def test_teach_then_use(test_db):
@@ -69,7 +72,7 @@ def test_price_change_affects_next_total_preserves_history(test_db):
     # 4. Verify historical ledger entry 1 still recorded original Rs 160
     conn = get_connection(test_db)
     cur = conn.cursor()
-    cur.execute("SELECT amount FROM ledger_entries ORDER BY seq ASC")
+    cur.execute("SELECT amount FROM ledger_entries WHERE is_seed = 0 ORDER BY seq ASC")
     amounts = [row[0] for row in cur.fetchall()]
     assert amounts == [160.0, 185.0]
     conn.close()
