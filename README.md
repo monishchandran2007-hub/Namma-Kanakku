@@ -5,6 +5,7 @@ colorFrom: blue
 colorTo: indigo
 sdk: docker
 app_port: 7860
+hardware: cpu-basic
 pinned: false
 license: mit
 ---
