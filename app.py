@@ -231,10 +231,17 @@ if __name__ == "__main__":
         show_error=True,
     )
 
-    # Register Starlette routes (/mcp, /widget, /healthz, /ledger, /reset) directly
-    # onto Gradio's FastAPI app so /widget, /mcp, and direct links work cleanly.
+    # Register Starlette routes (/mcp, /widget, /healthz, /ledger, /reset, /api/state, /api/command)
+    # directly onto Gradio's FastAPI router so /widget, /mcp, /healthz take absolute precedence over the SPA catch-all.
     for route in reversed(starlette_app.routes):
-        gradio_fastapi.routes.insert(0, route)
+        try:
+            gradio_fastapi.router.routes.insert(0, route)
+        except Exception:
+            pass
+        try:
+            gradio_fastapi.routes.insert(0, route)
+        except Exception:
+            pass
 
     # Also mount at /mcp-app as fallback
     gradio_fastapi.mount("/mcp-app", starlette_app)
