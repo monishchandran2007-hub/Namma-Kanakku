@@ -218,33 +218,14 @@ with gr.Blocks(title="Namma-Kanakku (நம்ம கணக்கு) - Voice Kh
         handle_natural_voice_command, inputs=[voice_input], outputs=[out_spoken_html, out_screen_html, out_card_html, out_raw_json]
     )
 
-# ── HF Spaces launch ────────────────────────────────────────────────────────
+# ── Combined HF Spaces & Starlette launch ──────────────────────────────────
+# Mount Gradio onto our Starlette app at /gradio so root routes (/healthz, /widget, /mcp, /ledger, /)
+# are handled natively by Starlette without Gradio catch-all interception
+app = gr.mount_gradio_app(starlette_app, demo, path="/gradio")
+
 if __name__ == "__main__":
-    port = 7860
+    import uvicorn
+    port = int(os.environ.get("PORT", 7860))
+    print(f"* Running on local URL:  http://0.0.0.0:{port}")
+    uvicorn.run(app, host="0.0.0.0", port=port)
 
-    # Start Gradio server in background (prints "Running on local URL:" → HF happy)
-    gradio_fastapi, _, _ = demo.launch(
-        server_name="0.0.0.0",
-        server_port=port,
-        prevent_thread_lock=True,
-        share=False,
-        show_error=True,
-    )
-
-    # Register Starlette routes (/mcp, /widget, /healthz, /ledger, /reset, /api/state, /api/command)
-    # directly onto Gradio's FastAPI router so /widget, /mcp, /healthz take absolute precedence over the SPA catch-all.
-    for route in reversed(starlette_app.routes):
-        try:
-            gradio_fastapi.router.routes.insert(0, route)
-        except Exception:
-            pass
-        try:
-            gradio_fastapi.routes.insert(0, route)
-        except Exception:
-            pass
-
-    # Also mount at /mcp-app as fallback
-    gradio_fastapi.mount("/mcp-app", starlette_app)
-
-    # Block main thread so the process stays alive
-    demo.block_thread()
