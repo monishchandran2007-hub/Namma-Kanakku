@@ -218,14 +218,23 @@ with gr.Blocks(title="Namma-Kanakku (நம்ம கணக்கு) - Voice Kh
         handle_natural_voice_command, inputs=[voice_input], outputs=[out_spoken_html, out_screen_html, out_card_html, out_raw_json]
     )
 
-# ── Combined HF Spaces & Starlette launch ──────────────────────────────────
-# Mount Gradio onto our Starlette app at /gradio so root routes (/healthz, /widget, /mcp, /ledger, /)
-# are handled natively by Starlette without Gradio catch-all interception
-app = gr.mount_gradio_app(starlette_app, demo, path="/gradio")
-
 if __name__ == "__main__":
-    import uvicorn
     port = int(os.environ.get("PORT", 7860))
-    print(f"* Running on local URL:  http://0.0.0.0:{port}")
-    uvicorn.run(app, host="0.0.0.0", port=port)
+
+    # Launch Gradio server
+    gradio_fastapi, _, _ = demo.launch(
+        server_name="0.0.0.0",
+        server_port=port,
+        prevent_thread_lock=True,
+        share=False,
+        show_error=True,
+    )
+
+    # Register Starlette MCP & Counter Screen routes (/healthz, /widget, /mcp, /ledger, /api/state, /api/command, /)
+    # directly at the head of gradio_fastapi.routes so they take absolute priority over the SPA catch-all
+    for r in reversed(starlette_app.routes):
+        gradio_fastapi.routes.insert(0, r)
+
+    # Block main thread to keep service alive
+    demo.block_thread()
 
